@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>HAFNET X - OSINT TERMINAL</title>
+    <style>
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            background-color: #000; color: #0f0;
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden; display: flex; justify-content: center; align-items: center;
+        }
+        #matrix-bg { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; opacity: 0.15; }
+        .terminal-window {
+            width: 80%; max-width: 900px; height: 80%;
+            background: rgba(10, 10, 10, 0.9);
+            border: 2px solid #0f0; box-shadow: 0 0 20px rgba(0, 255, 0, 0.5);
+            display: flex; flex-direction: column; overflow: hidden;
+            animation: fadeIn 1.5s ease-out;
+        }
+        .terminal-header {
+            background: #0f0; color: #000; padding: 5px 10px;
+            font-weight: bold; text-align: center; text-transform: uppercase;
+        }
+        .terminal-content { padding: 20px; flex-grow: 1; overflow-y: auto; display: flex; flex-direction: column; }
+        h1 { text-align: center; color: #0f0; text-shadow: 0 0 10px #0f0; animation: pulse 2s infinite; margin-top: 0; }
+        .input-group { display: flex; justify-content: center; gap: 10px; margin-bottom: 20px; }
+        input {
+            background: transparent; border: 1px solid #0f0; color: #0f0;
+            padding: 10px; font-family: monospace; font-size: 1.1em; width: 60%;
+            outline: none; transition: box-shadow 0.3s;
+        }
+        input:focus { box-shadow: 0 0 10px rgba(0, 255, 0, 0.7); }
+        button {
+            background: #0f0; color: #000; border: none; padding: 10px 20px;
+            font-family: monospace; font-size: 1.1em; cursor: pointer;
+            transition: background 0.3s, transform 0.1s; text-transform: uppercase; font-weight: bold;
+        }
+        button:hover { background: #fff; }
+        button:active { transform: scale(0.95); }
+        #output { border-top: 1px solid #333; padding-top: 20px; flex-grow: 1; }
+        .log-entry { margin-bottom: 10px; opacity: 0; animation: fadeInUp 0.5s forwards; }
+        .log-error { color: #f00; text-shadow: 0 0 5px #f00; }
+        .log-success { color: #0ff; text-shadow: 0 0 5px #0ff; }
+        .result-item { margin-left: 20px; border-left: 2px solid #333; padding-left: 10px; margin-bottom: 5px;}
+        .typewriter h1 { overflow: hidden; border-right: .15em solid #0f0; white-space: nowrap; margin: 0 auto; letter-spacing: .15em; animation: typing 3.5s steps(40, end), blink-caret .75s step-end infinite; }
+
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulse { 0% { text-shadow: 0 0 10px #0f0; } 50% { text-shadow: 0 0 20px #0f0, 0 0 30px #0f0; } 100% { text-shadow: 0 0 10px #0f0; } }
+        @keyframes typing { from { width: 0 } to { width: 100% } }
+        @keyframes blink-caret { from, to { border-color: transparent } 50% { border-color: #0f0; } }
+    </style>
+</head>
+<body>
+    <canvas id="matrix-bg"></canvas>
+    <div class="terminal-window">
+        <div class="terminal-header">HAFNET X - SECURE DATA ACCESS TERMINAL v1.0</div>
+        <div class="terminal-content">
+            <div class="typewriter"><h1>HAFNET X</h1></div>
+            <p style="text-align: center; color: #888;">>>> SYSTEM READY. AWAITING INPUT...</p>
+            <div class="input-group">
+                <input type="text" id="phoneInput" placeholder="Введите номер телефона (пр. 79991234567)">
+                <button onclick="startLookup()">SEARCH</button>
+            </div>
+            <div id="output"></div>
+        </div>
+    </div>
+
+    <script>
+        // Matrix Background Effect
+        const canvas = document.getElementById('matrix-bg');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+        const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@#$%^&*()*&^%";
+        const fontSize = 16; const columns = canvas.width / fontSize; const rainDrops = [];
+        for( let x = 0; x < columns; x++ ) { rainDrops[x] = 1; }
+        function drawMatrix() {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.05)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#0F0'; ctx.font = fontSize + 'px monospace';
+            for(let i = 0; i < rainDrops.length; i++) {
+                const text = alphabet.charAt(Math.floor(Math.random() * alphabet.alphabet.length));
+                ctx.fillText(text, i*fontSize, rainDrops[i]*fontSize);
+                if(rainDrops[i]*fontSize > canvas.height && Math.random() > 0.975){ rainDrops[i] = 0; }
+                rainDrops[i]++;
+            }
+        }
+        setInterval(drawMatrix, 30);
+        window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; });
+
+        // Lookup Logic
+        const output = document.getElementById('output');
+        function log(text, type = '') {
+            const entry = document.createElement('div'); entry.className = `log-entry ${type}`;
+            entry.innerHTML = `> ${text}`; output.appendChild(entry);
+            output.scrollTop = output.scrollHeight; // Auto-scroll
+        }
+
+        async function startLookup() {
+            const phone = document.getElementById('phoneInput').value;
+            output.innerHTML = ''; // Clear previous results
+            if(!phone) { log('ERROR: Идентификатор не введен.', 'log-error'); return; }
+            
+            log(`Инициализация поиска для: ${phone}...`);
+            await new Promise(r => setTimeout(r, 1000)); // Fake network delay
+            log('Подключение к удаленным узлам БД...', 'log-success');
+            await new Promise(r => setTimeout(r, 800));
+            log('Обход систем защиты (WAF bypass)...');
+            await new Promise(r => setTimeout(r, 1200));
+            log('Сбор данных из открытых источников и утечек...');
+
+            try {
+                // ПРИМЕР ЗАПРОСА К API. ЗАМЕНИТЕ НА РЕАЛЬНЫЙ ЭНДПОИНТ.
+                // Для теста используем прокси, чтобы избежать CORS
+                const apiUrl = `https://api.allorigins.win/get?url=${encodeURIComponent('https://api.example.com/v1/lookup?phone=' + phone)}`;
+                const response = await fetch(apiUrl);
+                if (!response.ok) throw new Error('Network response was not ok');
+                const data = await response.json();
+                const info = JSON.parse(data.contents); // Данные от API
+
+                await new Promise(r => setTimeout(r, 1000));
+                log('ДАННЫЕ НАЙДЕНЫ:', 'log-success');
+                
+                // Вывод результатов с задержкой для эффекта
+                setTimeout(() => log(`<div class="result-item">ФИО: ${info.fullname || 'Не найдено'}</div>`), 200);
+                setTimeout(() => log(`<div class="result-item">Дата рождения: ${info.dob || 'Нет данных'}</div>`), 400);
+                setTimeout(() => log(`<div class="result-item">Адрес: ${info.address || 'Скрыт'}</div>`), 600);
+                setTimeout(() => log(`<div class="result-item">Возможные соцсети: ${info.socials ? info.socials.join(', ') : 'N/A'}</div>`), 800);
+                setTimeout(() => log(`<div class="result-item">Оператор/Регион: ${info.carrier || 'Unknown'} / ${info.location || 'Unknown'}</div>`), 1000);
+                setTimeout(() => log('>>> ПОИСК ЗАВЕРШЕН.', 'log-success'), 1200);
+
+            } catch (error) {
+                await new Promise(r => setTimeout(r, 1000));
+                log(`ОШИБКА: Не удалось получить данные. ${error.message}`, 'log-error');
+                // Добавим фейковые данные для демонстрации, если API не работает
+                log('ОТОБРАЖЕНИЕ КЭШИРОВАННЫХ ДАННЫХ (ДЕМО):');
+                setTimeout(() => log(`<div class="result-item">ФИО: Иванов Иван Иванович</div>`), 200);
+                setTimeout(() => log(`<div class="result-item">Адрес: г. Москва, ул. Ленина, д. 1, кв. 99</div>`), 400);
+                setTimeout(() => log('>>> ПОИСК ЗАВЕРШЕН (DEMO MODE).', 'log-error'), 600);
+            }
+        }
+    </script>
+</body>
+</html>
+
